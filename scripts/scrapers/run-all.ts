@@ -39,6 +39,7 @@ async function main() {
   console.log(`  Jobs inserted:     ${stats.inserted}`);
   console.log(`  Jobs updated:      ${stats.updated}`);
   console.log(`  Jobs closed:       ${stats.closed}`);
+  console.log(`  Jobs skipped:      ${stats.skipped} (outside live markets)`);
   console.log(`  Errors:            ${stats.errors.length}`);
 
   if (stats.errors.length > 0) {

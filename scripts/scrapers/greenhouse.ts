@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { pathToFileURL } from "node:url";
 import type { NormalizedJob, ScrapeResult, ScrapeTarget } from "./types";
 import { detectCity, detectCountry, detectRemote, htmlToText, safeFetch, sleep, withRetry } from "./utils";
 import { targetsByAts } from "./targets";
@@ -82,7 +83,7 @@ export async function scrapeGreenhouse(target: ScrapeTarget): Promise<ScrapeResu
           locationText: locText,
           isRemote,
           remotePolicy: policy,
-          countryCode: country ?? target.countryCode,
+          countryCode: country,
           city,
           salaryMin,
           salaryMax,
@@ -128,7 +129,7 @@ export async function scrapeAllGreenhouse(): Promise<ScrapeResult[]> {
   return results;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   scrapeAllGreenhouse()
     .then((results) => {
       const totalJobs = results.reduce((sum, r) => sum + r.jobs.length, 0);

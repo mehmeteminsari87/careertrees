@@ -1,10 +1,14 @@
 import { Pool } from "pg";
 import type { ScrapeResult, ScrapeTarget } from "./types";
 
+// Only persist jobs in markets we've launched. Expand as we go live in NL/PT/IT/DE.
+const LIVE_COUNTRIES = new Set(["ie"]);
+
 interface PersistStats {
   inserted: number;
   updated: number;
   closed: number;
+  skipped: number;
   errors: string[];
 }
 
@@ -13,7 +17,7 @@ export async function persistScrapeResults(
   results: ScrapeResult[],
   scrapeRunId: string,
 ): Promise<PersistStats> {
-  const stats: PersistStats = { inserted: 0, updated: 0, closed: 0, errors: [] };
+  const stats: PersistStats = { inserted: 0, updated: 0, closed: 0, skipped: 0, errors: [] };
 
   // Map ATS slug → ats_source_id (cached)
   const atsMap = await getAtsSourceMap(pool);
@@ -33,6 +37,10 @@ export async function persistScrapeResults(
 
     for (const job of result.jobs) {
       try {
+        if (!job.countryCode || !LIVE_COUNTRIES.has(job.countryCode)) {
+          stats.skipped++;
+          continue;
+        }
         seenExternalIds.push(job.externalId);
 
         const locationId = job.city && job.countryCode
