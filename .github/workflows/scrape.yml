@@ -1,0 +1,45 @@
+name: Scrape ATS sources
+
+on:
+  schedule:
+    # 3x daily — 06:00, 14:00, 22:00 UTC
+    - cron: "0 6,14,22 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run scrapers
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run scrape
+
+      - name: Ping IndexNow (Bing/Yandex)
+        if: success()
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          if [ -n "$INDEXNOW_KEY" ]; then
+            curl -fsS -X POST "https://api.indexnow.org/IndexNow" \
+              -H "Content-Type: application/json" \
+              -d "{\"host\":\"ie.careertrees.org\",\"key\":\"$INDEXNOW_KEY\",\"keyLocation\":\"https://ie.careertrees.org/$INDEXNOW_KEY.txt\",\"urlList\":[\"https://ie.careertrees.org/sitemap.xml\"]}"
+          fi
