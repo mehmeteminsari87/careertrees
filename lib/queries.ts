@@ -151,6 +151,75 @@ export async function getCompanyBySlug(slug: string) {
   );
 }
 
+export interface OccupationRow {
+  id: number;
+  slug: string;
+  name: string;
+  category: string;
+  soc_code: string | null;
+  specialisation_notes: string | null;
+  is_ie_critical_skills_eligible: boolean;
+  ie_salary_threshold_eur: number;
+  source_effective_date: Date | null;
+}
+
+export async function getAllOccupations(): Promise<OccupationRow[]> {
+  return query<OccupationRow>(
+    `select id, slug, name, category, soc_code, specialisation_notes,
+            is_ie_critical_skills_eligible, ie_salary_threshold_eur, source_effective_date
+     from occupations
+     where is_ie_critical_skills_eligible = true
+     order by category, name`,
+  );
+}
+
+export async function getOccupationBySlug(slug: string): Promise<OccupationRow | null> {
+  return queryOne<OccupationRow>(
+    `select id, slug, name, category, soc_code, specialisation_notes,
+            is_ie_critical_skills_eligible, ie_salary_threshold_eur, source_effective_date
+     from occupations where slug = $1`,
+    [slug],
+  );
+}
+
+export async function getOccupationsByCategory(): Promise<Record<string, OccupationRow[]>> {
+  const rows = await getAllOccupations();
+  const grouped: Record<string, OccupationRow[]> = {};
+  for (const o of rows) {
+    if (!grouped[o.category]) grouped[o.category] = [];
+    grouped[o.category].push(o);
+  }
+  return grouped;
+}
+
+export async function getJobsByOccupation(
+  occupationId: number,
+  countryCode = "ie",
+  limit = 50,
+): Promise<JobRow[]> {
+  return query<JobRow>(
+    `${JOB_SELECT}
+     where j.occupation_id = $1 and j.country_code = $2 and j.closed_at is null
+     order by j.posted_at desc
+     limit $3`,
+    [occupationId, countryCode, limit],
+  );
+}
+
+export async function getOccupationJobCounts(): Promise<Record<number, number>> {
+  const rows = await query<{ occupation_id: number; n: string }>(
+    `select occupation_id, count(*)::text as n
+     from jobs
+     where occupation_id is not null and closed_at is null and country_code = 'ie'
+     group by occupation_id`,
+  );
+  const map: Record<number, number> = {};
+  rows.forEach((r) => {
+    map[r.occupation_id] = Number(r.n);
+  });
+  return map;
+}
+
 export async function getRoleStatsByCity(
   roleSlug: string,
   citySlug: string,
