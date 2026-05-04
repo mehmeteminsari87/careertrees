@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { pathToFileURL } from "node:url";
 import type { NormalizedJob, ScrapeResult, ScrapeTarget } from "./types";
-import { detectCity, detectCountry, detectRemote, htmlToText, safeFetch, sleep, withRetry } from "./utils";
+import { detectCity, detectCountry, detectRemote, htmlDecode, htmlToText, safeFetch, sleep, withRetry } from "./utils";
 import { targetsByAts } from "./targets";
 
 interface GreenhouseJob {
@@ -49,7 +49,7 @@ export async function scrapeGreenhouse(target: ScrapeTarget): Promise<ScrapeResu
 
     for (const j of ghJobs) {
       try {
-        const html = j.content ?? "";
+        const html = htmlDecode(j.content ?? "");
         const text = htmlToText(html);
         const locText = j.location?.name ?? null;
         const country = detectCountry(locText);

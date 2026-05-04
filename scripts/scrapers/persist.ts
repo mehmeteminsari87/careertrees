@@ -21,6 +21,7 @@ export async function persistScrapeResults(
 
   // Map ATS slug → ats_source_id (cached)
   const atsMap = await getAtsSourceMap(pool);
+  const roles = await loadRoles(pool);
 
   for (const result of results) {
     const atsSourceId = atsMap.get(result.target.ats);
@@ -46,11 +47,12 @@ export async function persistScrapeResults(
         const locationId = job.city && job.countryCode
           ? await getLocationId(pool, job.countryCode, job.city)
           : null;
+        const roleId = inferRoleId(job.title, roles);
 
         const result = await pool.query(
           `
           insert into jobs (
-            external_id, ats_source_id, company_id,
+            external_id, ats_source_id, company_id, role_id,
             title, description_html, description_text,
             location_id, location_text, is_remote, remote_policy, country_code,
             salary_min, salary_max, salary_currency, salary_period,
@@ -58,15 +60,16 @@ export async function persistScrapeResults(
             apply_url, posted_at, valid_through, raw_payload, scrape_run_id,
             last_seen_at
           ) values (
-            $1, $2, $3,
-            $4, $5, $6,
-            $7, $8, $9, $10, $11,
-            $12, $13, $14, $15,
-            $16, $17,
-            $18, $19, $20, $21, $22,
+            $1, $2, $3, $4,
+            $5, $6, $7,
+            $8, $9, $10, $11, $12,
+            $13, $14, $15, $16,
+            $17, $18,
+            $19, $20, $21, $22, $23,
             now()
           )
           on conflict (ats_source_id, external_id) do update set
+            role_id = excluded.role_id,
             title = excluded.title,
             description_html = excluded.description_html,
             description_text = excluded.description_text,
@@ -90,7 +93,7 @@ export async function persistScrapeResults(
           returning (xmax = 0) as inserted
           `,
           [
-            job.externalId, atsSourceId, companyId,
+            job.externalId, atsSourceId, companyId, roleId,
             job.title, job.descriptionHtml, job.descriptionText,
             locationId, job.locationText, job.isRemote, job.remotePolicy, job.countryCode,
             job.salaryMin, job.salaryMax, job.salaryCurrency, job.salaryPeriod,
@@ -135,6 +138,37 @@ async function getAtsSourceMap(pool: Pool): Promise<Map<string, number>> {
     `select id, api_kind from ats_sources`,
   );
   return new Map(res.rows.map((r) => [r.api_kind, r.id]));
+}
+
+interface RoleEntry {
+  id: number;
+  matchTerms: string[];
+}
+
+async function loadRoles(pool: Pool): Promise<RoleEntry[]> {
+  const res = await pool.query<{ id: number; name: string; synonyms: string[] }>(
+    `select id, name, synonyms from roles`,
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    matchTerms: [r.name.toLowerCase(), ...r.synonyms.map((s) => s.toLowerCase())],
+  }));
+}
+
+// Longest-match wins so "frontend developer" beats "developer".
+function inferRoleId(title: string, roles: RoleEntry[]): number | null {
+  const t = title.toLowerCase();
+  let bestId: number | null = null;
+  let bestLen = 0;
+  for (const r of roles) {
+    for (const term of r.matchTerms) {
+      if (term.length > bestLen && t.includes(term)) {
+        bestId = r.id;
+        bestLen = term.length;
+      }
+    }
+  }
+  return bestId;
 }
 
 async function upsertCompany(pool: Pool, target: ScrapeTarget, atsSourceId: number): Promise<number> {
