@@ -158,7 +158,7 @@ create table if not exists jobs (
   company_id int not null references companies(id) on delete cascade,
 
   title text not null,
-  title_normalized text generated always as (lower(unaccent(title))) stored,
+  title_normalized text generated always as (lower(title)) stored,
   role_id int references roles(id),
   description_html text,
   description_text text,
